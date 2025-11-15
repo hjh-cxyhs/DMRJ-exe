@@ -1,0 +1,575 @@
+import sys
+import random
+import json
+import os
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QLabel, QPushButton, QListWidget, 
+                             QLineEdit, QDialog, QMessageBox, QInputDialog, QFrame,
+                             QGridLayout)
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
+from PyQt5.QtGui import QFont, QPalette, QColor, QIcon
+
+# 默认密码和数据文件
+DEFAULT_PASSWORD = "123456"
+DATA_FILE = "name_list.json"
+PASSWORD_FILE = "password.json"  # 密码存储文件
+
+class PasswordDialog(QDialog):
+    """密码验证对话框"""
+    def __init__(self, parent=None, title="密码验证"):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setFixedSize(350, 180)
+        self.setModal(True)
+        
+        # 设置样式
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #f5f5f5;
+                border-radius: 10px;
+            }
+            QLabel {
+                color: #333;
+                font-size: 14px;
+            }
+            QLineEdit {
+                padding: 8px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                font-size: 14px;
+            }
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 5px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton#cancel {
+                background-color: #f44336;
+            }
+            QPushButton#cancel:hover {
+                background-color: #d32f2f;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        self.label = QLabel("请输入密码:")
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setPlaceholderText("输入密码...")
+        
+        self.button_layout = QHBoxLayout()
+        self.ok_button = QPushButton("确定")
+        self.cancel_button = QPushButton("取消")
+        self.cancel_button.setObjectName("cancel")
+        
+        self.button_layout.addWidget(self.ok_button)
+        self.button_layout.addStretch()
+        self.button_layout.addWidget(self.cancel_button)
+        
+        layout.addWidget(self.label)
+        layout.addWidget(self.password_input)
+        layout.addLayout(self.button_layout)
+        
+        self.setLayout(layout)
+        
+        # 连接信号和槽
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+    
+    def get_password(self):
+        return self.password_input.text()
+
+
+class ChangePasswordDialog(QDialog):
+    """修改密码对话框"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("修改密码")
+        self.setFixedSize(400, 250)
+        self.setModal(True)
+        
+        # 设置样式
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #f5f5f5;
+                border-radius: 10px;
+            }
+            QLabel {
+                color: #333;
+                font-size: 14px;
+            }
+            QLineEdit {
+                padding: 8px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                font-size: 14px;
+            }
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 5px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton#cancel {
+                background-color: #f44336;
+            }
+            QPushButton#cancel:hover {
+                background-color: #d32f2f;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # 当前密码
+        self.current_password_label = QLabel("当前密码:")
+        self.current_password_input = QLineEdit()
+        self.current_password_input.setEchoMode(QLineEdit.Password)
+        self.current_password_input.setPlaceholderText("输入当前密码...")
+        
+        # 新密码
+        self.new_password_label = QLabel("新密码:")
+        self.new_password_input = QLineEdit()
+        self.new_password_input.setEchoMode(QLineEdit.Password)
+        self.new_password_input.setPlaceholderText("输入新密码...")
+        
+        # 确认新密码
+        self.confirm_password_label = QLabel("确认新密码:")
+        self.confirm_password_input = QLineEdit()
+        self.confirm_password_input.setEchoMode(QLineEdit.Password)
+        self.confirm_password_input.setPlaceholderText("再次输入新密码...")
+        
+        self.button_layout = QHBoxLayout()
+        self.ok_button = QPushButton("确定")
+        self.cancel_button = QPushButton("取消")
+        self.cancel_button.setObjectName("cancel")
+        
+        self.button_layout.addWidget(self.ok_button)
+        self.button_layout.addStretch()
+        self.button_layout.addWidget(self.cancel_button)
+        
+        layout.addWidget(self.current_password_label)
+        layout.addWidget(self.current_password_input)
+        layout.addWidget(self.new_password_label)
+        layout.addWidget(self.new_password_input)
+        layout.addWidget(self.confirm_password_label)
+        layout.addWidget(self.confirm_password_input)
+        layout.addLayout(self.button_layout)
+        
+        self.setLayout(layout)
+        
+        # 连接信号和槽
+        self.ok_button.clicked.connect(self.verify_and_accept)
+        self.cancel_button.clicked.connect(self.reject)
+    
+    def verify_and_accept(self):
+        current_password = self.current_password_input.text()
+        new_password = self.new_password_input.text()
+        confirm_password = self.confirm_password_input.text()
+        
+        if not current_password:
+            QMessageBox.warning(self, "错误", "请输入当前密码！")
+            return
+            
+        if not new_password:
+            QMessageBox.warning(self, "错误", "请输入新密码！")
+            return
+            
+        if new_password != confirm_password:
+            QMessageBox.warning(self, "错误", "新密码与确认密码不一致！")
+            return
+            
+        self.current_password = current_password
+        self.new_password = new_password
+        self.accept()
+    
+    def get_passwords(self):
+        return self.current_password, self.new_password
+
+
+class NameListApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.password = self.load_password()  # 从文件加载密码
+        self.names = self.load_names()  # 从文件加载名单
+        self.init_ui()
+        
+    def load_password(self):
+        """从文件加载密码"""
+        if os.path.exists(PASSWORD_FILE):
+            try:
+                with open(PASSWORD_FILE, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return data.get('password', DEFAULT_PASSWORD)
+            except:
+                # 如果文件损坏或格式错误，返回默认密码
+                self.save_password(DEFAULT_PASSWORD)
+                return DEFAULT_PASSWORD
+        else:
+            # 如果文件不存在，返回默认密码并保存
+            self.save_password(DEFAULT_PASSWORD)
+            return DEFAULT_PASSWORD
+    
+    def save_password(self, password):
+        """保存密码到文件"""
+        try:
+            with open(PASSWORD_FILE, 'w', encoding='utf-8') as f:
+                json.dump({'password': password}, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"保存密码时出错: {str(e)}")
+            return False
+    
+    def load_names(self):
+        """从文件加载学生名单"""
+        if os.path.exists(DATA_FILE):
+            try:
+                with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except:
+                # 如果文件损坏或格式错误，返回默认名单
+                return ["张三", "李四", "王五", "赵六", "钱七"]
+        else:
+            # 如果文件不存在，返回默认名单
+            return ["张三", "李四", "王五", "赵六", "钱七"]
+    
+    def save_names(self):
+        """保存学生名单到文件"""
+        try:
+            with open(DATA_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.names, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"保存数据时出错: {str(e)}")
+            return False
+        
+    def init_ui(self):
+        # 设置主窗口
+        self.setWindowTitle("随机点名器")
+        self.setGeometry(300, 300, 600, 750)
+        
+        # 设置应用程序样式
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f0f0f0;
+            }
+            QLabel#title {
+                color: #333;
+                font-size: 28px;
+                font-weight: bold;
+                padding: 10px;
+            }
+            QLabel#result {
+                background-color: white;
+                border: 2px solid #ddd;
+                border-radius: 15px;
+                padding: 30px;
+                font-size: 32px;
+                font-weight: bold;
+                color: #2196F3;
+                min-height: 50px;
+            }
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+            QPushButton#start {
+                background-color: #4CAF50;
+            }
+            QPushButton#stop {
+                background-color: #f44336;
+            }
+            QPushButton#start:hover {
+                background-color: #45a049;
+            }
+            QPushButton#stop:hover {
+                background-color: #d32f2f;
+            }
+            QListWidget {
+                background-color: white;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                padding: 5px;
+                font-size: 14px;
+            }
+            QListWidget::item {
+                padding: 8px;
+                border-bottom: 1px solid #eee;
+            }
+            QListWidget::item:selected {
+                background-color: #e3f2fd;
+                color: #1565C0;
+            }
+            QFrame {
+                background-color: white;
+                border-radius: 10px;
+                border: 1px solid #e0e0e0;
+            }
+        """)
+        
+        # 中央部件
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # 主布局
+        layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(20)
+        
+        # 标题
+        title_label = QLabel("随机点名器")
+        title_label.setObjectName("title")
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+        
+        # 结果显示区域
+        result_frame = QFrame()
+        result_layout = QVBoxLayout()
+        result_frame.setLayout(result_layout)
+        
+        self.result_label = QLabel("准备点名")
+        self.result_label.setObjectName("result")
+        self.result_label.setAlignment(Qt.AlignCenter)
+        self.result_label.setMinimumHeight(120)
+        result_layout.addWidget(self.result_label)
+        
+        layout.addWidget(result_frame)
+        
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        
+        self.start_button = QPushButton("开始点名")
+        self.start_button.setObjectName("start")
+        self.start_button.clicked.connect(self.start_random)
+        
+        self.stop_button = QPushButton("停止")
+        self.stop_button.setObjectName("stop")
+        self.stop_button.clicked.connect(self.stop_random)
+        self.stop_button.setEnabled(False)
+        
+        button_layout.addWidget(self.start_button)
+        button_layout.addWidget(self.stop_button)
+        
+        layout.addLayout(button_layout)
+        
+        # 名单列表区域
+        list_frame = QFrame()
+        list_layout = QVBoxLayout()
+        list_frame.setLayout(list_layout)
+        
+        list_label = QLabel("当前名单:")
+        list_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #333;")
+        list_layout.addWidget(list_label)
+        
+        self.name_list = QListWidget()
+        self.name_list.addItems(self.names)
+        list_layout.addWidget(self.name_list)
+        
+        layout.addWidget(list_frame)
+        
+        # 管理按钮 - 使用网格布局
+        manage_layout = QGridLayout()
+        
+        self.add_button = QPushButton("添加名字")
+        self.add_button.clicked.connect(self.add_name)
+        
+        self.remove_button = QPushButton("删除名字")
+        self.remove_button.clicked.connect(self.remove_name)
+        
+        self.change_password_button = QPushButton("修改密码")
+        self.change_password_button.clicked.connect(self.change_password)
+        
+        self.save_button = QPushButton("手动保存数据")
+        self.save_button.clicked.connect(self.manual_save)
+        
+        manage_layout.addWidget(self.add_button, 0, 0)
+        manage_layout.addWidget(self.remove_button, 0, 1)
+        manage_layout.addWidget(self.change_password_button, 1, 0)
+        manage_layout.addWidget(self.save_button, 1, 1)
+        
+        layout.addLayout(manage_layout)
+        
+        central_widget.setLayout(layout)
+        
+        # 随机点名定时器
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_random_name)
+        self.is_randomizing = False
+        
+        # 动画效果
+        self.animation = QPropertyAnimation(self.result_label, b"geometry")
+        self.animation.setEasingCurve(QEasingCurve.OutBounce)
+        self.animation.setDuration(1000)
+        
+    def start_random(self):
+        self.is_randomizing = True
+        self.start_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
+        
+        # 添加动画效果
+        start_geometry = self.result_label.geometry()
+        self.animation.setStartValue(start_geometry)
+        self.animation.setEndValue(start_geometry)
+        self.animation.start()
+        
+        self.timer.start(100)  # 每100毫秒更新一次
+        
+    def stop_random(self):
+        self.is_randomizing = False
+        self.timer.stop()
+        self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        
+        # 添加停止动画
+        start_geometry = self.result_label.geometry()
+        self.animation.setStartValue(start_geometry)
+        self.animation.setEndValue(start_geometry)
+        self.animation.start()
+        
+        # 将结果显示为蓝色
+        self.result_label.setStyleSheet("""
+            QLabel#result {
+                background-color: white;
+                border: 2px solid #2196F3;
+                border-radius: 15px;
+                padding: 30px;
+                font-size: 32px;
+                font-weight: bold;
+                color: #2196F3;
+                min-height: 50px;
+            }
+        """)
+        
+    def update_random_name(self):
+        if self.names:
+            random_name = random.choice(self.names)
+            self.result_label.setText(random_name)
+            # 在随机过程中显示灰色
+            self.result_label.setStyleSheet("""
+                QLabel#result {
+                    background-color: white;
+                    border: 2px solid #ddd;
+                    border-radius: 15px;
+                    padding: 30px;
+                    font-size: 32px;
+                    font-weight: bold;
+                    color: #777;
+                    min-height: 50px;
+                }
+            """)
+        
+    def verify_password(self, title="密码验证"):
+        dialog = PasswordDialog(self, title)
+        if dialog.exec_() == QDialog.Accepted:
+            return dialog.get_password() == self.password
+        return False
+        
+    def add_name(self):
+        if not self.verify_password():
+            QMessageBox.warning(self, "错误", "密码错误！")
+            return
+            
+        name, ok = QInputDialog.getText(self, "添加名字", "请输入要添加的名字:")
+        if ok and name:
+            self.names.append(name)
+            self.name_list.clear()
+            self.name_list.addItems(self.names)
+            # 保存数据
+            if self.save_names():
+                QMessageBox.information(self, "成功", f"已成功添加: {name}")
+            else:
+                QMessageBox.warning(self, "警告", "添加成功但保存失败！")
+            
+    def remove_name(self):
+        if not self.verify_password():
+            QMessageBox.warning(self, "错误", "密码错误！")
+            return
+            
+        current_row = self.name_list.currentRow()
+        if current_row >= 0:
+            reply = QMessageBox.question(self, "确认删除", 
+                                        f"确定要删除 '{self.names[current_row]}' 吗?",
+                                        QMessageBox.Yes | QMessageBox.No)
+            if reply == QMessageBox.Yes:
+                name_to_remove = self.names[current_row]
+                del self.names[current_row]
+                self.name_list.clear()
+                self.name_list.addItems(self.names)
+                # 保存数据
+                if self.save_names():
+                    QMessageBox.information(self, "成功", f"已成功删除: {name_to_remove}")
+                else:
+                    QMessageBox.warning(self, "警告", "删除成功但保存失败！")
+        else:
+            QMessageBox.warning(self, "警告", "请先选择一个名字！")
+            
+    def change_password(self):
+        """修改密码"""
+        dialog = ChangePasswordDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            current_password, new_password = dialog.get_passwords()
+            
+            # 验证当前密码
+            if current_password != self.password:
+                QMessageBox.warning(self, "错误", "当前密码错误！")
+                return
+                
+            # 更新密码
+            self.password = new_password
+            if self.save_password(new_password):
+                QMessageBox.information(self, "成功", "密码修改成功！")
+            else:
+                QMessageBox.warning(self, "错误", "密码修改失败！")
+            
+    def manual_save(self):
+        """手动保存数据"""
+        if self.save_names():
+            QMessageBox.information(self, "成功", "数据已成功保存！")
+        else:
+            QMessageBox.warning(self, "错误", "保存数据时出错！")
+
+
+def main():
+    app = QApplication(sys.argv)
+    
+    # 设置应用程序样式为Fusion，以获得更现代的外观
+    app.setStyle("Fusion")
+    
+    # 设置应用程序字体
+    font = QFont("微软雅黑", 10)
+    app.setFont(font)
+    
+    window = NameListApp()
+    window.show()
+    
+    sys.exit(app.exec_())
+
+
+if __name__ == "__main__":
+    main()
